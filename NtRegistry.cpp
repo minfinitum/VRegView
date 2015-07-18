@@ -16,8 +16,8 @@ void ToUnicodeString(std::wstring& value, UNICODE_STRING& usValue)
     RtlZeroMemory(&usValue, sizeof(usValue));
 
     // Don't use RtlInitUnicodeString (it calls wcslen on strings that maynot be null terminated)
-    usValue.Length = value.size() * sizeof(wchar_t);
-    usValue.MaximumLength = value.size() * sizeof(wchar_t);
+    usValue.Length = (USHORT)(value.size() * sizeof(wchar_t));
+    usValue.MaximumLength = (USHORT)(value.size() * sizeof(wchar_t));
     usValue.Buffer = (LPWSTR)value.data();
 }
 
@@ -26,8 +26,8 @@ void ToUnicodeString(std::vector<wchar_t>& value, UNICODE_STRING& usValue)
     RtlZeroMemory(&usValue, sizeof(usValue));
 
     // Don't use RtlInitUnicodeString (it calls wcslen on strings that maynot be null terminated)
-    usValue.Length = value.size() * sizeof(wchar_t);
-    usValue.MaximumLength = value.size() * sizeof(wchar_t);
+    usValue.Length = (USHORT)(value.size() * sizeof(wchar_t));
+    usValue.MaximumLength = (USHORT)(value.size() * sizeof(wchar_t));
     usValue.Buffer = (LPWSTR)value.data();
 }
 
@@ -67,7 +67,7 @@ bool NtRegistry::create(const wchar_t* szKey, size_t cchSubKeyLength, SECURITY_A
     m_sKey = std::wstring(szKey, cchSubKeyLength);
 
     UNICODE_STRING usKeyPath;
-	ToUnicodeString(m_sKey, usKeyPath);
+    ToUnicodeString(m_sKey, usKeyPath);
 
     OBJECT_ATTRIBUTES ObjectAttributes;
     InitializeObjectAttributes(&ObjectAttributes, &usKeyPath, Attributes, NULL, (sa != NULL) ? sa->lpSecurityDescriptor : NULL);
@@ -95,7 +95,7 @@ bool NtRegistry::open(const wchar_t* szKey, size_t cchKeyLength, BOOL &bIsHidden
     m_sKey = std::wstring(szKey, cchKeyLength);
 
     UNICODE_STRING usKeyPath;
-	ToUnicodeString(m_sKey, usKeyPath);
+    ToUnicodeString(m_sKey, usKeyPath);
 
     OBJECT_ATTRIBUTES ObjectAttributes;
     InitializeObjectAttributes(&ObjectAttributes, &usKeyPath, OBJ_CASE_INSENSITIVE | OBJ_OPENLINK, NULL, NULL);
@@ -119,7 +119,7 @@ bool NtRegistry::open(const wchar_t* szKey, size_t cchKeyLength, BOOL &bIsHidden
         baseReg += L"\\";
         baseReg.append(tokens[2].c_str(), tokens[2].size());
 
-	    ToUnicodeString(m_sKey, usKeyPath);
+        ToUnicodeString(m_sKey, usKeyPath);
         InitializeObjectAttributes(&ObjectAttributes, &usKeyPath, OBJ_CASE_INSENSITIVE | OBJ_OPENLINK, NULL, NULL);
 
         retVal = m_ntdlllib.NtOpenKey(&htemp, samDesired, &ObjectAttributes);
