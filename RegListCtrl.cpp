@@ -70,7 +70,7 @@ void CRegListCtrl::setValueNames(const RegItem &item)
     m_keys.clear();
 
     NtRegistry reg;
-    if(reg.open(item.getKey(), item.getSubKey().c_str()))
+    if(reg.open(item.getKey(), item.getSubKey().c_str(), item.getSubKey().length()))
     {
         bool bDefaultAdded = false;
 
@@ -95,10 +95,10 @@ void CRegListCtrl::setValueNames(const RegItem &item)
                 }
 
                 nType = REG_SZ;
-                reg.getValueType(iterValueName->c_str(), nType);
+                reg.getValueType(iterValueName->c_str(), iterValueName->size(), nType);
 
                 nSize = 0;
-                reg.getValueSize(iterValueName->c_str(), nSize);	
+                reg.getValueSize(iterValueName->c_str(), iterValueName->size(), nSize);	
 
                 newItem.set(item.getKey(), item.getSubKey(), *iterValueName, nType);
                 addItem(newItem, nSize);
@@ -144,7 +144,7 @@ void CRegListCtrl::addItem(const RegItem &item, const unsigned int nSize)
     if(nType == REG_SZ || nType == REG_MULTI_SZ || nType == REG_EXPAND_SZ)
         lvItem.iImage = 1;
 
-    std::wstring sName = item.getValueName();
+    std::wstring sName = item.getValueNameDisplayable();
     if(!sName.empty())
         lvItem.pszText = (LPWSTR)sName.c_str();
     else 
@@ -234,8 +234,8 @@ int CALLBACK CRegListCtrl::CompareProc(LPARAM lParam1, LPARAM lParam2, LPARAM lP
     CRegListCtrl *pListCtrl = (CRegListCtrl *)lParamSort;
 
     int nCompare = 0;
-    std::wstring strItem1 = pListCtrl->m_keys[lParam1].getValueName();
-    std::wstring strItem2 = pListCtrl->m_keys[lParam2].getValueName();
+    std::wstring strItem1 = pListCtrl->m_keys[lParam1].getValueNameDisplayable();
+    std::wstring strItem2 = pListCtrl->m_keys[lParam2].getValueNameDisplayable();
 
     if(strItem1 == REG_VALUENAME_DEFAULT)
     {

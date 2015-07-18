@@ -46,14 +46,15 @@ void CRegEdit::setRegValue(RegItem &item)
     clear();
 
     NtRegistry reg;
-    if(reg.open(item.getKey(), item.getSubKey().c_str()))
+	std::wstring subKey(item.getSubKey());
+    if(reg.open(item.getKey(), subKey.c_str(), subKey.size()))
     {
+		std::wstring valueName(item.getValueName());
         unsigned long nSize = 0;
-
-        if(reg.getValueSize(item.getValueName().c_str(), nSize) && nSize > 0)
+        if(reg.getValueSize(valueName.c_str(), valueName.size(), nSize) && nSize > 0)
         {
             unsigned long nType = 0;
-            if(reg.getValueType(item.getValueName().c_str(), nType))
+            if(reg.getValueType(valueName.c_str(), valueName.size(), nType))
             {
                 std::vector<char> vecData(nSize, 0);
 
@@ -65,7 +66,7 @@ void CRegEdit::setRegValue(RegItem &item)
                         const int nMaxLen = (nSize / sizeof(wchar_t)) + 1; // add additional buffer
                         std::vector<wchar_t> vecData(nMaxLen, 0);
 
-                        if(reg.getValue(item.getValueName().c_str(), (unsigned char *)&vecData[0], nSize))
+                        if(reg.getValue(valueName.c_str(), valueName.size(), (unsigned char *)&vecData[0], nSize))
                             setText(&vecData[0]);
                     }
                     break;
@@ -73,7 +74,7 @@ void CRegEdit::setRegValue(RegItem &item)
                 case REG_DWORD:
                     {
                         DWORD nValue = 0;
-                        if(reg.getValue(item.getValueName().c_str(), nValue))
+                        if(reg.getValue(valueName.c_str(), valueName.size(), nValue))
                             setDWord(nValue);
                     }
                     break;
@@ -81,7 +82,7 @@ void CRegEdit::setRegValue(RegItem &item)
                 case REG_MULTI_SZ:
                     {
                         std::vector<std::wstring> vecMultiString;
-                        if(reg.getValue(item.getValueName().c_str(), vecMultiString))
+                        if(reg.getValue(valueName.c_str(), valueName.size(), vecMultiString))
                             setMultiString(vecMultiString);
                     }
                     break;
@@ -96,8 +97,7 @@ void CRegEdit::setRegValue(RegItem &item)
                 case REG_BINARY:
                     {
                         std::vector<unsigned char> vecData(nSize, 0);
-
-                        if(reg.getValue(item.getValueName().c_str(), &vecData[0], nSize))
+                        if(reg.getValue(valueName.c_str(), valueName.size(), &vecData[0], nSize))
                             setBinary(&vecData[0], nSize);
                     }
                     break;

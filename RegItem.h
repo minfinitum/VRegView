@@ -28,6 +28,7 @@ public:
 
 	void setValueName(const std::wstring &sValueName);
 	std::wstring getValueName() const;
+    std::wstring getValueNameDisplayable() const;
 
 	void setType(const int nType);
 	int getType() const;
@@ -36,6 +37,7 @@ private:
 	HKEY m_hKey;
 	std::wstring m_sSubKey;
 	std::wstring m_sValueName;
+    std::wstring m_sValueNameDisplayable;
 	int m_nType;
 };
 

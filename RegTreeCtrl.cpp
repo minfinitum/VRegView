@@ -207,7 +207,7 @@ void CRegTreeCtrl::LoadItem(HTREEITEM hItem)
     RegItem regitem;
     if(getPath(hItem, regitem))
     {
-        if(ntreg.open(regitem.getKey(), regitem.getSubKey().c_str()))
+        if(ntreg.open(regitem.getKey(), regitem.getSubKey().c_str(), regitem.getSubKey().length()))
         {
             ntreg.listSubKeys(subkeys);
             ntreg.close();

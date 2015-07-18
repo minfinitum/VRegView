@@ -16,9 +16,9 @@ RegItem::~RegItem(void)
 void RegItem::set(const HKEY hKey, const std::wstring &sSubKey, const std::wstring &sValueName, const int nType)
 {
     m_hKey = hKey;
-    m_sSubKey = sSubKey;
-    m_sValueName = sValueName;
     m_nType = nType;
+    setSubKey(sSubKey);
+    setValueName(sValueName);
 }
 
 std::wstring RegItem::toString() const
@@ -120,6 +120,20 @@ std::wstring RegItem::getSubKey() const
 void RegItem::setValueName(const std::wstring &sValueName) 
 {
     m_sValueName = sValueName; 
+    m_sValueNameDisplayable = sValueName;
+
+    if(m_sValueName.size() > 1) {
+        m_sValueNameDisplayable.clear();
+
+        for(size_t idx = 0; idx < m_sValueName.size() - 1; ++idx) {
+            if(m_sValueName[idx] == L'\0') {
+                m_sValueNameDisplayable.append(L"{NULL}");
+            } else {
+                m_sValueNameDisplayable += m_sValueName[idx];
+            }
+        }
+        m_sValueNameDisplayable += m_sValueName[m_sValueName.size() - 1];
+    }
 }
 
 std::wstring RegItem::getValueName() const 
@@ -127,6 +141,10 @@ std::wstring RegItem::getValueName() const
     return m_sValueName; 
 }
 
+std::wstring RegItem::getValueNameDisplayable() const
+{
+    return m_sValueNameDisplayable;
+}
 
 void RegItem::setType(const int nType)
 {

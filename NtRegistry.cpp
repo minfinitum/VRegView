@@ -7,9 +7,29 @@
 // Local Includes
 #include "ntregistry.h"
 #include "utils.h"
+#include <assert.h>
 
 NtDllLib NtRegistry::m_ntdlllib;
 
+void ToUnicodeString(std::wstring& value, UNICODE_STRING& usValue)
+{
+    RtlZeroMemory(&usValue, sizeof(usValue));
+
+    // Don't use RtlInitUnicodeString (it calls wcslen on strings that maynot be null terminated)
+    usValue.Length = value.size() * sizeof(wchar_t);
+    usValue.MaximumLength = value.size() * sizeof(wchar_t);
+    usValue.Buffer = (LPWSTR)value.data();
+}
+
+void ToUnicodeString(std::vector<wchar_t>& value, UNICODE_STRING& usValue)
+{
+    RtlZeroMemory(&usValue, sizeof(usValue));
+
+    // Don't use RtlInitUnicodeString (it calls wcslen on strings that maynot be null terminated)
+    usValue.Length = value.size() * sizeof(wchar_t);
+    usValue.MaximumLength = value.size() * sizeof(wchar_t);
+    usValue.Buffer = (LPWSTR)value.data();
+}
 
 NtRegistry::NtRegistry(void)
 :m_hKey(NULL)
@@ -28,27 +48,26 @@ NtRegistry::~NtRegistry(void)
 {
     close();
 }
-bool NtRegistry::create(HKEY hKey, const wchar_t* szSubKey, REGSAM samDesired)
+
+bool NtRegistry::create(HKEY hKey, const wchar_t* szSubKey, size_t cchSubKeyLength, REGSAM samDesired)
 {
-    std::wstring sKey(getPath(hKey, szSubKey));
-    return create(sKey.c_str(), NULL, samDesired);
+    std::wstring sKey(getPath(hKey, szSubKey, cchSubKeyLength));
+    return create(sKey.c_str(), sKey.size(), NULL, samDesired);
 }
 
-bool NtRegistry::create(HKEY hKey, const wchar_t* szSubKey, SECURITY_ATTRIBUTES *sa, REGSAM samDesired, ULONG Attributes)
+bool NtRegistry::create(HKEY hKey, const wchar_t* szSubKey, size_t cchSubKeyLength, SECURITY_ATTRIBUTES *sa, REGSAM samDesired, ULONG Attributes)
 {
-    std::wstring sKey(getPath(hKey, szSubKey));
-    return create(sKey.c_str(), sa, samDesired, Attributes);
+    std::wstring sKey(getPath(hKey, szSubKey, cchSubKeyLength));
+    return create(sKey.c_str(), sKey.size(), sa, samDesired, Attributes);
 }
 
-bool NtRegistry::create(const wchar_t* szKey, SECURITY_ATTRIBUTES *sa, REGSAM samDesired, ULONG Attributes)
+bool NtRegistry::create(const wchar_t* szKey, size_t cchSubKeyLength, SECURITY_ATTRIBUTES *sa, REGSAM samDesired, ULONG Attributes)
 {
     close();
-
-    m_sKey = szKey;
+    m_sKey = std::wstring(szKey, cchSubKeyLength);
 
     UNICODE_STRING usKeyPath;
-    RtlZeroMemory(&usKeyPath, sizeof(usKeyPath));
-    m_ntdlllib.RtlInitUnicodeString(&usKeyPath, m_sKey.c_str());
+	ToUnicodeString(m_sKey, usKeyPath);
 
     OBJECT_ATTRIBUTES ObjectAttributes;
     InitializeObjectAttributes(&ObjectAttributes, &usKeyPath, Attributes, NULL, (sa != NULL) ? sa->lpSecurityDescriptor : NULL);
@@ -56,28 +75,27 @@ bool NtRegistry::create(const wchar_t* szKey, SECURITY_ATTRIBUTES *sa, REGSAM sa
     return m_ntdlllib.NtCreateKey(&m_hKey, KEY_ALL_ACCESS, &ObjectAttributes, 0, NULL, REG_OPTION_NON_VOLATILE, NULL) == STATUS_SUCCESS;
 }
 
-bool NtRegistry::open(HKEY hKey, const wchar_t* szSubKey, REGSAM samDesired)
+bool NtRegistry::open(HKEY hKey, const wchar_t* szSubKey, size_t cchSubKeyLength, REGSAM samDesired)
 {
     BOOL bIsHidden = FALSE;
-    std::wstring sKey(getPath(hKey, szSubKey));
-    return open(sKey.c_str(), bIsHidden, samDesired);
+    std::wstring sKey(getPath(hKey, szSubKey, cchSubKeyLength));
+    return open(sKey.c_str(), sKey.size(), bIsHidden, samDesired);
 }
 
-bool NtRegistry::open(HKEY hKey, const wchar_t* szSubKey, BOOL &bIsHidden, REGSAM samDesired)
+bool NtRegistry::open(HKEY hKey, const wchar_t* szSubKey, size_t cchSubKeyLength, BOOL &bIsHidden, REGSAM samDesired)
 {
-    std::wstring sKey(getPath(hKey, szSubKey));
-    return open(sKey.c_str(), bIsHidden, samDesired);
+    std::wstring sKey(getPath(hKey, szSubKey, cchSubKeyLength));
+    return open(sKey.c_str(), sKey.size(), bIsHidden, samDesired);
 }
 
-bool NtRegistry::open(const wchar_t* szKey, BOOL &bIsHidden, REGSAM samDesired)
+bool NtRegistry::open(const wchar_t* szKey, size_t cchKeyLength, BOOL &bIsHidden, REGSAM samDesired)
 {
     close();
 
-    m_sKey = szKey;
+    m_sKey = std::wstring(szKey, cchKeyLength);
 
     UNICODE_STRING usKeyPath;
-    RtlZeroMemory(&usKeyPath, sizeof(usKeyPath));
-    m_ntdlllib.RtlInitUnicodeString(&usKeyPath, m_sKey.c_str());
+	ToUnicodeString(m_sKey, usKeyPath);
 
     OBJECT_ATTRIBUTES ObjectAttributes;
     InitializeObjectAttributes(&ObjectAttributes, &usKeyPath, OBJ_CASE_INSENSITIVE | OBJ_OPENLINK, NULL, NULL);
@@ -94,10 +112,14 @@ bool NtRegistry::open(const wchar_t* szKey, BOOL &bIsHidden, REGSAM samDesired)
         HKEY htemp = 0;
         HKEY hcurrent = 0;
 
-        std::wstring baseReg = L"\\" + tokens[0] + L"\\" + tokens[1] + L"\\" + tokens[2];
+        std::wstring baseReg = L"\\";
+        baseReg.append(tokens[0].c_str(), tokens[0].size());
+        baseReg += L"\\";
+        baseReg.append(tokens[1].c_str(), tokens[1].size());
+        baseReg += L"\\";
+        baseReg.append(tokens[2].c_str(), tokens[2].size());
 
-        RtlZeroMemory(&usKeyPath, sizeof(usKeyPath));
-        m_ntdlllib.RtlInitUnicodeString(&usKeyPath, baseReg.c_str());
+	    ToUnicodeString(m_sKey, usKeyPath);
         InitializeObjectAttributes(&ObjectAttributes, &usKeyPath, OBJ_CASE_INSENSITIVE | OBJ_OPENLINK, NULL, NULL);
 
         retVal = m_ntdlllib.NtOpenKey(&htemp, samDesired, &ObjectAttributes);
@@ -105,12 +127,11 @@ bool NtRegistry::open(const wchar_t* szKey, BOOL &bIsHidden, REGSAM samDesired)
 
             for(size_t idx = 3; idx < tokens.size(); idx++ ) {
 
-                UNICODE_STRING usKeyPath;
-                RtlZeroMemory(&usKeyPath, sizeof(usKeyPath));
-                m_ntdlllib.RtlInitUnicodeString(&usKeyPath, tokens[idx].c_str());
+                UNICODE_STRING usTokenPath;
+                ToUnicodeString(tokens[idx], usTokenPath);
 
                 OBJECT_ATTRIBUTES ObjectAttributes;
-                InitializeObjectAttributes(&ObjectAttributes, &usKeyPath, OBJ_CASE_INSENSITIVE | OBJ_OPENLINK, htemp, NULL);
+                InitializeObjectAttributes(&ObjectAttributes, &usTokenPath, OBJ_CASE_INSENSITIVE | OBJ_OPENLINK, htemp, NULL);
 
                 retVal = m_ntdlllib.NtCreateKey(&hcurrent, samDesired, &ObjectAttributes, 0, NULL, REG_OPTION_NON_VOLATILE, NULL);
                 if(STATUS_SUCCESS == retVal) {
@@ -147,44 +168,56 @@ void NtRegistry::close()
     m_sKey = L"";
 }
 
-bool NtRegistry::setValue(const wchar_t* lpValueName, const std::wstring &value)
+bool NtRegistry::setValue(const wchar_t* lpValueName, size_t cchValueLength, const std::wstring &value)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     return m_ntdlllib.NtSetValueKey(m_hKey, &usValueName, NULL, REG_SZ, (PVOID)value.c_str(), ((int)value.length() + 1) * sizeof(wchar_t)) == STATUS_SUCCESS;
 }
 
-bool NtRegistry::setValue(const wchar_t* lpValueName, DWORD nValue)
+bool NtRegistry::setValue(const wchar_t* lpValueName, size_t cchValueLength, DWORD nValue)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     return m_ntdlllib.NtSetValueKey(m_hKey, &usValueName, NULL, REG_DWORD, (PVOID)nValue, sizeof(nValue)) == STATUS_SUCCESS;
 }
 
-bool NtRegistry::setValue(const wchar_t* lpValueName, BOOL nValue)
+bool NtRegistry::setValue(const wchar_t* lpValueName, size_t cchValueLength, BOOL nValue)
 {
-    return setValue(lpValueName, (DWORD)nValue);
+    return setValue(lpValueName, cchValueLength, (DWORD)nValue);
 }
 
-bool NtRegistry::setValue(const wchar_t* lpValueName, const unsigned char * pValue, unsigned long nSize)
+bool NtRegistry::setValue(const wchar_t* lpValueName, size_t cchValueLength, const unsigned char * pValue, unsigned long nSize)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     return m_ntdlllib.NtSetValueKey(m_hKey, &usValueName, NULL, REG_BINARY, (PVOID)pValue, nSize) == STATUS_SUCCESS;
 }
 
-bool NtRegistry::setValue(const wchar_t* lpValueName, const char * pValue, unsigned long nSize)
+bool NtRegistry::setValue(const wchar_t* lpValueName, size_t cchValueLength, const char*pValue, unsigned long nSize)
 {
-    return setValue(lpValueName, (const unsigned char *)pValue, nSize);
+    return setValue(lpValueName, cchValueLength, (const unsigned char *)pValue, nSize);
 }
 
-bool NtRegistry::setValue(const wchar_t* lpValueName, const std::vector<std::wstring> & strings)
+bool NtRegistry::setValue(const wchar_t* lpValueName, size_t cchValueLength, const std::vector<std::wstring> & strings)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     bool bSuccess = false;
     if (strings.size() == 0)
@@ -219,10 +252,13 @@ bool NtRegistry::setValue(const wchar_t* lpValueName, const std::vector<std::wst
     return bSuccess;
 }
 
-bool NtRegistry::getValue(const wchar_t * lpValueName, std::wstring & value)
+bool NtRegistry::getValue(const wchar_t * lpValueName, size_t cchValueLength, std::wstring & value)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     bool bSuccess = false;
     DWORD nReturnSize = 0;
@@ -247,10 +283,13 @@ bool NtRegistry::getValue(const wchar_t * lpValueName, std::wstring & value)
     return bSuccess;
 }
 
-bool NtRegistry::getValue(const wchar_t* lpValueName, DWORD & nValue)
+bool NtRegistry::getValue(const wchar_t* lpValueName, size_t cchValueLength, DWORD & nValue)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     bool bSuccess = false;
     DWORD nReturnSize = 0;
@@ -278,10 +317,13 @@ bool NtRegistry::getValue(const wchar_t* lpValueName, DWORD & nValue)
     return bSuccess;
 }
 
-bool NtRegistry::getValue(const wchar_t* lpValueName, BOOL & nValue)
+bool NtRegistry::getValue(const wchar_t* lpValueName, size_t cchValueLength, BOOL & nValue)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     bool bSuccess = false;
     DWORD nReturnSize = 0;
@@ -309,10 +351,13 @@ bool NtRegistry::getValue(const wchar_t* lpValueName, BOOL & nValue)
     return bSuccess;
 }
 
-bool NtRegistry::getValue(const wchar_t* lpValueName, unsigned char * nValue, unsigned long nSize)
+bool NtRegistry::getValue(const wchar_t* lpValueName, size_t cchValueLength, unsigned char * nValue, unsigned long nSize)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     bool bSuccess = false;
     DWORD nReturnSize = 0;
@@ -339,10 +384,13 @@ bool NtRegistry::getValue(const wchar_t* lpValueName, unsigned char * nValue, un
 
     return bSuccess;
 }
-bool NtRegistry::getValue(const wchar_t* lpValueName, char * nValue, unsigned long nSize)
+bool NtRegistry::getValue(const wchar_t* lpValueName, size_t cchValueLength, char * nValue, unsigned long nSize)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     bool bSuccess = false;
     DWORD nReturnSize = 0;
@@ -370,10 +418,13 @@ bool NtRegistry::getValue(const wchar_t* lpValueName, char * nValue, unsigned lo
     return bSuccess;
 }
 
-bool NtRegistry::getValue(const wchar_t* lpValueName, std::vector<std::wstring> &strings)
+bool NtRegistry::getValue(const wchar_t* lpValueName, size_t cchValueLength, std::vector<std::wstring> &strings)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     bool bSuccess = false;
     DWORD nReturnSize = 0;
@@ -432,10 +483,13 @@ bool NtRegistry::getValue(const wchar_t* lpValueName, std::vector<std::wstring> 
     return bSuccess;
 }
 
-bool NtRegistry::deleteValue(const wchar_t* lpValueName)
+bool NtRegistry::deleteValue(const wchar_t* lpValueName, size_t cchValueLength)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     return m_ntdlllib.NtDeleteValueKey(m_hKey, &usValueName) == STATUS_SUCCESS;
 }
@@ -455,8 +509,8 @@ bool NtRegistry::deleteSubKey()
             NtRegistry reg;
             BOOL bIsHidden = FALSE;
 
-            if(reg.open(m_sKey.c_str(), bIsHidden, KEY_ALL_ACCESS))
-                bSuccess = bSuccess && reg.deleteSubKey(iterSubKey->c_str());
+            if(reg.open(m_sKey.c_str(), m_sKey.size(), bIsHidden, KEY_ALL_ACCESS))
+                bSuccess = bSuccess && reg.deleteSubKey(iterSubKey->c_str(), iterSubKey->size());
         }
     }
 
@@ -469,28 +523,30 @@ bool NtRegistry::deleteSubKey()
 
     return bSuccess;
 }
-bool NtRegistry::deleteSubKey(const wchar_t* lpSubKey)
+bool NtRegistry::deleteSubKey(const wchar_t* lpSubKey, size_t cchValueLength)
 {
     std::wstring sKey(m_sKey);
-    std::wstring sSubKey(lpSubKey);
+    std::wstring sSubKey(lpSubKey, cchValueLength);
     if(m_sKey.at(m_sKey.length() - 1) != L'\\' && sSubKey.at(sSubKey.length() - 1) != L'\\')
         sKey += L"\\";
     sKey += sSubKey;
 
     bool bSuccess = false;
-
     NtRegistry ntreg;
     BOOL bIsHidden = FALSE;
 
-    if(ntreg.open(sKey.c_str(), bIsHidden, KEY_ALL_ACCESS))
+    if(ntreg.open(sKey.c_str(), sKey.size(), bIsHidden, KEY_ALL_ACCESS))
         bSuccess = ntreg.deleteSubKey();
     return bSuccess;
 }
 
-bool NtRegistry::getValueSize(const wchar_t * lpValueName, unsigned long & nSize)
+bool NtRegistry::getValueSize(const wchar_t* lpValueName, size_t cchValueLength, unsigned long & nSize)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     bool bSuccess = false;
     DWORD nReturnSize = 0;
@@ -515,10 +571,13 @@ bool NtRegistry::getValueSize(const wchar_t * lpValueName, unsigned long & nSize
     return bSuccess;
 }
 
-bool NtRegistry::getValueType(const wchar_t *lpValueName, unsigned long & nType)
+bool NtRegistry::getValueType(const wchar_t *lpValueName, size_t cchValueLength, unsigned long& nType)
 {
+    std::vector<wchar_t> valueName(cchValueLength);
+    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
+
     UNICODE_STRING usValueName;
-    m_ntdlllib.RtlInitUnicodeString(&usValueName, lpValueName);
+    ToUnicodeString(valueName, usValueName);
 
     bool bSuccess = false;
     DWORD nReturnSize = 0;
@@ -526,7 +585,7 @@ bool NtRegistry::getValueType(const wchar_t *lpValueName, unsigned long & nType)
     NTSTATUS nResult = m_ntdlllib.NtQueryValueKey(m_hKey, &usValueName, KeyValuePartialInformation, NULL, 0, &nReturnSize);
     if(nResult == STATUS_BUFFER_OVERFLOW || nResult == STATUS_BUFFER_TOO_SMALL)
     {
-        std::vector<char> vecData(nReturnSize * sizeof(wchar_t), 0);
+        std::vector<BYTE> vecData(nReturnSize * sizeof(wchar_t), 0);
 
         DWORD nAllocSize = nReturnSize;
         nReturnSize = 0;
@@ -559,7 +618,7 @@ bool NtRegistry::listValueNames(std::vector<std::wstring> & strings)
 
             DWORD nValueNameIndex = 0;
             const int nValueNameLength = info->MaxValueNameLen + 1;
-            std::vector<wchar_t> valueName(nValueNameLength);
+            std::vector<wchar_t> valueName(nValueNameLength * sizeof(wchar_t));
 
             for (nValueNameIndex = 0; nValueNameIndex < info->Values; nValueNameIndex++)
             {
@@ -578,9 +637,7 @@ bool NtRegistry::listValueNames(std::vector<std::wstring> & strings)
                         &vecDataValue[0], nSize, &nReturnSize) == STATUS_SUCCESS)
                     {
                         KEY_VALUE_BASIC_INFORMATION *info = (KEY_VALUE_BASIC_INFORMATION *) &vecDataValue[0];
-
-                        std::wstring sName(info->Name, info->NameLength / sizeof(wchar_t));
-                        strings.push_back(sName);
+                        strings.emplace_back(info->Name, info->NameLength/sizeof(wchar_t));
                     }
                 }
             }
@@ -606,7 +663,7 @@ bool NtRegistry::listSubKeys(std::vector<std::wstring> & strings)
 
             DWORD nValueNameIndex = 0;
             const int nValueNameLength = info->MaxNameLen + 1;
-            std::vector<wchar_t> valueName(nValueNameLength);
+            std::vector<wchar_t> valueName(nValueNameLength * sizeof(wchar_t));
 
             for (nValueNameIndex = 0; nValueNameIndex < info->SubKeys; nValueNameIndex++)
             {
@@ -625,9 +682,7 @@ bool NtRegistry::listSubKeys(std::vector<std::wstring> & strings)
                         &vecDataValue[0], nSize, &nReturnSize) == STATUS_SUCCESS)
                     {
                         KEY_BASIC_INFORMATION *info = (KEY_BASIC_INFORMATION *) &vecDataValue[0];
-
-                        std::wstring sName(info->Name, info->NameLength/ sizeof(wchar_t));
-                        strings.push_back(sName);
+                        strings.emplace_back(info->Name, info->NameLength/sizeof(wchar_t));
                     }
                 }
             }
@@ -690,38 +745,26 @@ std::wstring NtRegistry::getRootPath(HKEY hKey)
     return sRootPath;
 }
 
-std::wstring NtRegistry::getPath(HKEY hKey, const wchar_t *lpSubKey)
+std::wstring NtRegistry::getPath(HKEY hKey, const wchar_t *lpSubKey, size_t cchSubKeyLength)
 {
     std::wstring sPath = getRootPath(hKey);
-    if(lpSubKey[0] == L'\\')
-    {
-        sPath += lpSubKey;
-    }
-    else
-    {
+    if(lpSubKey[0] != L'\\') {
         sPath += L"\\";
-        sPath += lpSubKey;
     }
+    sPath += std::wstring(lpSubKey, cchSubKeyLength);
 
     return sPath;
 }
 
-std::wstring NtRegistry::getPath(HKEY hKey, const wchar_t *lpSubKey, const int nSubKeyLength, int &nKeyLength)
+std::wstring NtRegistry::getPath(HKEY hKey, const wchar_t *lpSubKey, size_t cchSubKeyLength, size_t &cchKeyLength)
 {
     std::wstring sPath = getRootPath(hKey);
-    if(lpSubKey[0] == L'\\')
-    {
-        nKeyLength = (int)sPath.length() + nSubKeyLength;
-        sPath += lpSubKey;
-    }
-    else
-    {
+    if(sPath[sPath.length() - 1] != L'\\' && lpSubKey[0] != L'\\') {
         sPath += L"\\";
-        nKeyLength = (int)sPath.length() + nSubKeyLength;
-
-        sPath += lpSubKey;
     }
 
+    cchKeyLength = sPath.length() + cchSubKeyLength;
+    sPath += std::wstring(lpSubKey, cchSubKeyLength);
     return sPath;
 }
 
