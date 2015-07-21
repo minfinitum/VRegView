@@ -296,7 +296,7 @@ void CRegTreeCtrl::onDeleteSubKey()
     RegItem regitem;
     if(getSelectedPath(regitem)) {
         NtRegistry ntreg;
-        if(ntreg.create(regitem.getKey(), regitem.getSubKey().c_str(), 0, KEY_ALL_ACCESS))
+        if(ntreg.create(regitem.getKey(), regitem.getSubKey().c_str(), regitem.getSubKey().size(), 0))
         {
             ntreg.deleteSubKey();
             ntreg.close();
@@ -357,10 +357,7 @@ void CRegTreeCtrl::OnContextMenu(CWnd* pWnd, CPoint point)
         GetItemRect( ht, &rect, true );
         ClientToScreen( &rect );
 
-        /* Offset the popup menu origin so
-        * we can read some of the text
-        */
-
+        /* Offset the popup menu origin so we can read some of the text */
         point.x = rect.left + 15;
         point.y = rect.top + 8;
     }
@@ -368,7 +365,7 @@ void CRegTreeCtrl::OnContextMenu(CWnd* pWnd, CPoint point)
     CMenu menu;
     menu.LoadMenu(IDR_TREEVIEWMENU);
 
-    CMenu * pop;
+    CMenu* pop;
     pop = menu.GetSubMenu(0);
 
     UINT uCmd = pop->TrackPopupMenu(TPM_RETURNCMD | TPM_LEFTALIGN |	TPM_RIGHTBUTTON, point.x, point.y, this, NULL );

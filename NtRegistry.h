@@ -13,7 +13,6 @@ public:
     NtRegistry(void);
     virtual ~NtRegistry(void);
 
-    bool create(HKEY hKey, const wchar_t* szSubKey, size_t cchSubKeyLength, REGSAM samDesired = KEY_ALL_ACCESS);
     bool create(HKEY hKey, const wchar_t* szSubKey, size_t cchSubKeyLength, SECURITY_ATTRIBUTES *sa, REGSAM samDesired = KEY_ALL_ACCESS, ULONG ATTRIBUTES = OBJ_CASE_INSENSITIVE | OBJ_OPENLINK);
 
     bool open(HKEY hKey, const wchar_t* szSubKey, size_t cchSubKeyLength, REGSAM samDesired = KEY_READ);
@@ -37,8 +36,7 @@ public:
     bool getValue(const wchar_t* lpValueName, size_t cchValueLength, char * nValue, unsigned long nSize);
     bool getValue(const wchar_t* lpValueName, size_t cchValueLength, std::vector<std::wstring> &strings);
 
-    bool getValueType(const wchar_t *lpValueName, size_t cchValueLength, unsigned long& nType);
-    bool getValueSize(const wchar_t *lpValueName, size_t cchValueLength, unsigned long& nSize);
+    bool getValueInfo(const wchar_t *lpValueName, size_t cchValueLength, unsigned long& nSize, unsigned long& nType);
 
     bool deleteValue(const wchar_t* lpValueName, size_t cchValueLength);
     bool deleteSubKey();
@@ -50,8 +48,8 @@ public:
     int getSubKeysCount();
 
 protected:
-    bool create(const wchar_t* szKey, size_t cchSubKeyLength, SECURITY_ATTRIBUTES *sa, REGSAM samDesired = KEY_ALL_ACCESS, ULONG Attributes = OBJ_CASE_INSENSITIVE | OBJ_OPENLINK);
-    bool open(const wchar_t* szKey, size_t cchSubKeyLength, BOOL &bIsHidden, REGSAM samDesired = KEY_READ);
+    bool create(const wchar_t* szKey, size_t cchKeyLength, SECURITY_ATTRIBUTES *sa, REGSAM samDesired = KEY_ALL_ACCESS, ULONG Attributes = OBJ_CASE_INSENSITIVE | OBJ_OPENLINK);
+    bool open(const wchar_t* szKey, size_t cchKeyLength, BOOL &bIsHidden, REGSAM samDesired = KEY_READ);
 
     std::wstring getRootPath(HKEY hKey);
 

@@ -15,19 +15,23 @@
 #define IDR_TREEVIEWMENU                134
 #define IDD_VREGVIEW_FORM               135
 #define IDR_VREGVIEWTYPE                136
+#define IDR_LISTVIEWMENU                138
 #define IDC_EDIT                        1000
 #define IDC_LIST                        1001
 #define IDC_LEFTVIEW                    1002
 #define ID_TREEVIEWMENU_REFRESH         32772
 #define ID_TREEVIEWMENU_DELETE          32775
 #define ID_TREEVIEWMENU_COPYPATH        32776
+#define ID_LISTVIEWMENU_DELETE          32777
+#define ID_LISTVIEWMENU_REFRESH         32778
+#define ID_LISTVIEWMENU_COPYPATH        32779
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        137
-#define _APS_NEXT_COMMAND_VALUE         32777
+#define _APS_NEXT_RESOURCE_VALUE        139
+#define _APS_NEXT_COMMAND_VALUE         32780
 #define _APS_NEXT_CONTROL_VALUE         1003
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

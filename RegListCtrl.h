@@ -9,31 +9,37 @@
 
 class CRegListCtrl : public CListCtrl
 {
-	DECLARE_DYNAMIC(CRegListCtrl)
+    DECLARE_DYNAMIC(CRegListCtrl)
 
 public:
-	CRegListCtrl();
-	virtual ~CRegListCtrl();
+    CRegListCtrl();
+    virtual ~CRegListCtrl();
 
-	void initialise();
-	void setValueNames(const RegItem &item);
+    void initialise();
+    void setValueNames(const RegItem &item);
 
-	bool getSelectedItem(std::wstring &sValueName);
-	bool getSelectedItemParam(RegItem &item);
-
-	void addKeysFromPath(std::wstring &sPath);
+    bool getSelectedItem(std::wstring &sValueName);
+    bool getSelectedItemParam(RegItem &item);
+    bool getSelectedItemParamIndex(size_t& index);
 
 protected:
-	void addItem(const RegItem &item, const unsigned int nSize);
-	static int CALLBACK CompareProc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
+    void addItem(const RegItem &item, const unsigned int nSize);
+    bool deleteItem(const RegItem &item);
+
+    void refresh();
+
+    static int CALLBACK CompareProc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 
 private:
-	CImageList m_imageList;
+    CImageList m_imageList;
 
 protected:
-	DECLARE_MESSAGE_MAP()
+    DECLARE_MESSAGE_MAP()
 
-	VEC_REGITEM m_keys;
+    RegItem m_current;
+    VEC_REGITEM m_keys;
+public:
+    afx_msg void OnNMRClick(NMHDR *pNMHDR, LRESULT *pResult);
 };
 
 

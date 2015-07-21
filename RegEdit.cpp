@@ -46,65 +46,62 @@ void CRegEdit::setRegValue(RegItem &item)
     clear();
 
     NtRegistry reg;
-	std::wstring subKey(item.getSubKey());
+    std::wstring subKey(item.getSubKey());
     if(reg.open(item.getKey(), subKey.c_str(), subKey.size()))
     {
-		std::wstring valueName(item.getValueName());
+        std::wstring valueName(item.getValueName());
         unsigned long nSize = 0;
-        if(reg.getValueSize(valueName.c_str(), valueName.size(), nSize) && nSize > 0)
+        unsigned long nType = 0;
+        if(reg.getValueInfo(valueName.c_str(), valueName.size(), nSize, nType) && nSize > 0)
         {
-            unsigned long nType = 0;
-            if(reg.getValueType(valueName.c_str(), valueName.size(), nType))
+            std::vector<char> vecData(nSize, 0);
+
+            switch(nType)
             {
-                std::vector<char> vecData(nSize, 0);
-
-                switch(nType)
+            case REG_SZ:
+            case REG_EXPAND_SZ:
                 {
-                case REG_SZ:
-                case REG_EXPAND_SZ:
-                    {
-                        const int nMaxLen = (nSize / sizeof(wchar_t)) + 1; // add additional buffer
-                        std::vector<wchar_t> vecData(nMaxLen, 0);
+                    const int nMaxLen = (nSize / sizeof(wchar_t)) + 1; // enforce null termination
+                    std::vector<wchar_t> vecData(nMaxLen, 0);
 
-                        if(reg.getValue(valueName.c_str(), valueName.size(), (unsigned char *)&vecData[0], nSize))
-                            setText(&vecData[0]);
-                    }
-                    break;
-
-                case REG_DWORD:
-                    {
-                        DWORD nValue = 0;
-                        if(reg.getValue(valueName.c_str(), valueName.size(), nValue))
-                            setDWord(nValue);
-                    }
-                    break;
-
-                case REG_MULTI_SZ:
-                    {
-                        std::vector<std::wstring> vecMultiString;
-                        if(reg.getValue(valueName.c_str(), valueName.size(), vecMultiString))
-                            setMultiString(vecMultiString);
-                    }
-                    break;
-
-                case REG_DWORD_BIG_ENDIAN:
-                case REG_QWORD:
-                case REG_RESOURCE_REQUIREMENTS_LIST:
-                case REG_FULL_RESOURCE_DESCRIPTOR:
-                case REG_RESOURCE_LIST:
-                case REG_NONE:
-                case REG_LINK:
-                case REG_BINARY:
-                    {
-                        std::vector<unsigned char> vecData(nSize, 0);
-                        if(reg.getValue(valueName.c_str(), valueName.size(), &vecData[0], nSize))
-                            setBinary(&vecData[0], nSize);
-                    }
-                    break;
-
-                default:
-                    break;
+                    if(reg.getValue(valueName.c_str(), valueName.size(), (unsigned char *)&vecData[0], nSize))
+                        setText(&vecData[0]);
                 }
+                break;
+
+            case REG_DWORD:
+                {
+                    DWORD nValue = 0;
+                    if(reg.getValue(valueName.c_str(), valueName.size(), nValue))
+                        setDWord(nValue);
+                }
+                break;
+
+            case REG_MULTI_SZ:
+                {
+                    std::vector<std::wstring> vecMultiString;
+                    if(reg.getValue(valueName.c_str(), valueName.size(), vecMultiString))
+                        setMultiString(vecMultiString);
+                }
+                break;
+
+            case REG_DWORD_BIG_ENDIAN:
+            case REG_QWORD:
+            case REG_RESOURCE_REQUIREMENTS_LIST:
+            case REG_FULL_RESOURCE_DESCRIPTOR:
+            case REG_RESOURCE_LIST:
+            case REG_NONE:
+            case REG_LINK:
+            case REG_BINARY:
+                {
+                    std::vector<unsigned char> vecData(nSize, 0);
+                    if(reg.getValue(valueName.c_str(), valueName.size(), &vecData[0], nSize))
+                        setBinary(&vecData[0], nSize);
+                }
+                break;
+
+            default:
+                break;
             }
         }
         reg.close();

@@ -5,7 +5,8 @@
 #include "reglistctrl.h"
 #include "ntregistry.h"
 #include "resource.h"
-
+#include "ClipBoard.h"
+#include "Utils.h"
 
 #include <strsafe.h>
 
@@ -26,6 +27,9 @@ CRegListCtrl::~CRegListCtrl()
 
 
 BEGIN_MESSAGE_MAP(CRegListCtrl, CListCtrl)
+    ON_NOTIFY_REFLECT(NM_RCLICK, &CRegListCtrl::OnNMRClick)
+    ON_WM_CONTEXTMENU()
+    ON_NOTIFY_REFLECT(NM_RCLICK, &CRegListCtrl::OnNMRClick)
 END_MESSAGE_MAP()
 
 
@@ -62,10 +66,16 @@ void CRegListCtrl::initialise()
     m_keys.clear();
 }
 
+void CRegListCtrl::refresh()
+{
+    setValueNames(m_current);
+}
+
 void CRegListCtrl::setValueNames(const RegItem &item)
 {
-    LockWindowUpdate();
+    m_current = item;
 
+    LockWindowUpdate();
     DeleteAllItems();
     m_keys.clear();
 
@@ -94,11 +104,9 @@ void CRegListCtrl::setValueNames(const RegItem &item)
                     bDefaultAdded = true;
                 }
 
-                nType = REG_SZ;
-                reg.getValueType(iterValueName->c_str(), iterValueName->size(), nType);
-
                 nSize = 0;
-                reg.getValueSize(iterValueName->c_str(), iterValueName->size(), nSize);	
+                nType = REG_SZ;
+                reg.getValueInfo(iterValueName->c_str(), iterValueName->size(), nSize, nType);
 
                 newItem.set(item.getKey(), item.getSubKey(), *iterValueName, nType);
                 addItem(newItem, nSize);
@@ -182,7 +190,29 @@ void CRegListCtrl::addItem(const RegItem &item, const unsigned int nSize)
     SetItem(&lvItem);
 
     SortItems(CompareProc, (DWORD_PTR)this);
+}
 
+bool CRegListCtrl::deleteItem(const RegItem &item)
+{
+    bool bSuccess = false;
+    NtRegistry ntreg;
+    std::wstring subKey(item.getSubKey());
+    if(ntreg.create(item.getKey(), subKey.c_str(), subKey.size(), 0, KEY_ALL_ACCESS))
+    {
+        std::wstring valueName(item.getValueName());
+        bSuccess = ntreg.deleteValue(valueName.c_str(), valueName.size());
+        if(!bSuccess) {
+            std::wstring message;
+            message += std::wstring(L"Value:[") + item.getValueNameDisplayable() + L"]";
+            MessageBox(message.c_str(), L"Error Delete Value:", MB_ICONERROR);
+        }
+        ntreg.close();
+    } else {
+        std::wstring message;
+        message += std::wstring(L"SubKey:[") + subKey.c_str() + L"]";
+        MessageBox(message.c_str(), L"Error Create Key:", MB_ICONERROR);
+    }
+    return bSuccess;
 }
 
 bool CRegListCtrl::getSelectedItem(std::wstring &sValueName)
@@ -208,7 +238,7 @@ bool CRegListCtrl::getSelectedItem(std::wstring &sValueName)
     return bSuccess;
 }
 
-bool CRegListCtrl::getSelectedItemParam(RegItem &item)
+bool CRegListCtrl::getSelectedItemParamIndex(size_t& index)
 {
     bool bSuccess = false;
     if(GetSelectedCount() > 0)
@@ -216,16 +246,26 @@ bool CRegListCtrl::getSelectedItemParam(RegItem &item)
         int nSelected = GetNextItem(-1, LVNI_SELECTED);
         if(nSelected != -1)
         {
-            bSuccess = true;
-
-            VEC_REGITEM::size_type nIndex = GetItemData(nSelected);
-            if(nIndex >= 0 && nIndex < m_keys.size())
+            VEC_REGITEM::size_type itemIndex = GetItemData(nSelected);
+            if(itemIndex >= 0 && itemIndex < m_keys.size())
             {
-                item = m_keys[nIndex];
+                index = itemIndex;
+                bSuccess = true;
             }
         }
     }
 
+    return bSuccess;
+}
+
+bool CRegListCtrl::getSelectedItemParam(RegItem &item)
+{
+    bool bSuccess = false;
+    size_t index = 0;
+    if(getSelectedItemParamIndex(index)) {
+        item = m_keys[index];
+        bSuccess = true;
+    }
     return bSuccess;
 }
 
@@ -258,4 +298,65 @@ int CALLBACK CRegListCtrl::CompareProc(LPARAM lParam1, LPARAM lParam2, LPARAM lP
     }
 
     return nCompare;
+}
+
+void CRegListCtrl::OnNMRClick(NMHDR *pNMHDR, LRESULT *pResult)
+{
+    size_t itemIndex = 0;
+    if(!getSelectedItemParamIndex(itemIndex)) {
+        return;
+    }
+
+    LPNMITEMACTIVATE pNMItemActivate = reinterpret_cast<LPNMITEMACTIVATE>(pNMHDR);
+    CPoint point(pNMItemActivate->ptAction);
+    ::ClientToScreen(pNMHDR->hwndFrom, &point);
+
+    CMenu menu;
+    menu.LoadMenu(IDR_LISTVIEWMENU);
+    CMenu* pop;
+    pop = menu.GetSubMenu(0);
+
+    UINT uCmd = pop->TrackPopupMenu(TPM_RETURNCMD | TPM_LEFTALIGN |	TPM_RIGHTBUTTON, point.x, point.y, this, NULL );    
+
+    /* Menu item chosen ? */
+    if (uCmd != 0)
+    {
+        switch(uCmd)
+        {
+        case ID_LISTVIEWMENU_DELETE:
+            {
+                RegItem item = m_keys[itemIndex];
+                if(deleteItem(item)) {
+                    m_keys.erase(m_keys.begin() + itemIndex);
+                    refresh();
+                }
+            }
+            break;
+
+        case ID_LISTVIEWMENU_COPYPATH:
+            {
+                RegItem item;
+                if(getSelectedItemParam(item)) {
+                    std::wstring sPath = item.toString();
+                    if(sPath.empty())
+                        sPath = Utils::getComputerName();
+
+                    CWnd *pWnd = GetParentOwner();
+
+                    CClipBoard cb;
+                    cb.Clear(*pWnd);
+                    cb.CopyTo(*pWnd, sPath);
+                }
+            }
+            break;
+
+        case ID_LISTVIEWMENU_REFRESH:
+            {
+                refresh();
+            }
+            break;
+        }
+    }
+
+    *pResult = 0;
 }

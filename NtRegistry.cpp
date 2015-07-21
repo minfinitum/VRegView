@@ -16,7 +16,18 @@ void ToUnicodeString(std::wstring& value, UNICODE_STRING& usValue)
     RtlZeroMemory(&usValue, sizeof(usValue));
 
     // Don't use RtlInitUnicodeString (it calls wcslen on strings that maynot be null terminated)
-    usValue.Length = (USHORT)(value.size() * sizeof(wchar_t));
+    // From msdn
+    // If the string is null-terminated, Length does not include the trailing null character.
+    size_t index = 0;
+    for (auto iter = value.rbegin(); iter != value.rend(); ++iter) {
+        if (*iter != L'\0') {
+            index = value.size() - (iter - value.rbegin());
+            break;
+        }
+    }
+
+    // Don't use RtlInitUnicodeString (it calls wcslen on strings that maynot be null terminated)
+    usValue.Length = (USHORT)(index * sizeof(wchar_t));
     usValue.MaximumLength = (USHORT)(value.size() * sizeof(wchar_t));
     usValue.Buffer = (LPWSTR)value.data();
 }
@@ -49,12 +60,6 @@ NtRegistry::~NtRegistry(void)
     close();
 }
 
-bool NtRegistry::create(HKEY hKey, const wchar_t* szSubKey, size_t cchSubKeyLength, REGSAM samDesired)
-{
-    std::wstring sKey(getPath(hKey, szSubKey, cchSubKeyLength));
-    return create(sKey.c_str(), sKey.size(), NULL, samDesired);
-}
-
 bool NtRegistry::create(HKEY hKey, const wchar_t* szSubKey, size_t cchSubKeyLength, SECURITY_ATTRIBUTES *sa, REGSAM samDesired, ULONG Attributes)
 {
     std::wstring sKey(getPath(hKey, szSubKey, cchSubKeyLength));
@@ -72,7 +77,8 @@ bool NtRegistry::create(const wchar_t* szKey, size_t cchSubKeyLength, SECURITY_A
     OBJECT_ATTRIBUTES ObjectAttributes;
     InitializeObjectAttributes(&ObjectAttributes, &usKeyPath, Attributes, NULL, (sa != NULL) ? sa->lpSecurityDescriptor : NULL);
 
-    return m_ntdlllib.NtCreateKey(&m_hKey, KEY_ALL_ACCESS, &ObjectAttributes, 0, NULL, REG_OPTION_NON_VOLATILE, NULL) == STATUS_SUCCESS;
+    NTSTATUS status = m_ntdlllib.NtCreateKey(&m_hKey, KEY_ALL_ACCESS, &ObjectAttributes, 0, NULL, REG_OPTION_NON_VOLATILE, NULL);
+    return STATUS_SUCCESS == status;
 }
 
 bool NtRegistry::open(HKEY hKey, const wchar_t* szSubKey, size_t cchSubKeyLength, REGSAM samDesired)
@@ -540,7 +546,7 @@ bool NtRegistry::deleteSubKey(const wchar_t* lpSubKey, size_t cchValueLength)
     return bSuccess;
 }
 
-bool NtRegistry::getValueSize(const wchar_t* lpValueName, size_t cchValueLength, unsigned long & nSize)
+bool NtRegistry::getValueInfo(const wchar_t* lpValueName, size_t cchValueLength, unsigned long& nSize, unsigned long& nType)
 {
     std::vector<wchar_t> valueName(cchValueLength);
     memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
@@ -564,36 +570,6 @@ bool NtRegistry::getValueSize(const wchar_t* lpValueName, size_t cchValueLength,
             KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *) &vecData[0];
 
             nSize = info->DataLength;
-            bSuccess = true;
-        }
-    }
-
-    return bSuccess;
-}
-
-bool NtRegistry::getValueType(const wchar_t *lpValueName, size_t cchValueLength, unsigned long& nType)
-{
-    std::vector<wchar_t> valueName(cchValueLength);
-    memcpy_s(valueName.data(), valueName.size() * sizeof(wchar_t), lpValueName, valueName.size() * sizeof(wchar_t));
-
-    UNICODE_STRING usValueName;
-    ToUnicodeString(valueName, usValueName);
-
-    bool bSuccess = false;
-    DWORD nReturnSize = 0;
-
-    NTSTATUS nResult = m_ntdlllib.NtQueryValueKey(m_hKey, &usValueName, KeyValuePartialInformation, NULL, 0, &nReturnSize);
-    if(nResult == STATUS_BUFFER_OVERFLOW || nResult == STATUS_BUFFER_TOO_SMALL)
-    {
-        std::vector<BYTE> vecData(nReturnSize * sizeof(wchar_t), 0);
-
-        DWORD nAllocSize = nReturnSize;
-        nReturnSize = 0;
-
-        if(m_ntdlllib.NtQueryValueKey(m_hKey, &usValueName, KeyValuePartialInformation, &vecData[0], nAllocSize, &nReturnSize) == STATUS_SUCCESS)
-        {
-            KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *) &vecData[0];
-
             nType = info->Type;
             bSuccess = true;
         }
